@@ -1,6 +1,6 @@
 # Quiz Please Web Scraper
 
-This project is a Python script that scrapes game data from [Quiz Please Yerevan](https://yerevan.quizplease.ru/schedule-past), processes it, and stores it in a Google Sheets document. The script only processes new games since its last run.
+This project is a Python script that scrapes game data from [Quiz Please Yerevan](https://yerevan.quizplease.ru), processes it, and stores it in a Google Sheets document. The script only processes new games since its last run.
 
 ## Setup
 
