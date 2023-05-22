@@ -95,7 +95,7 @@ def process_game(_game_id):
     df['ID'] = _game_id
     df['Дата'] = date
     df = df.melt(id_vars=['ID', 'Дата', 'Название команды', 'Категория', 'Название игры', 'Номер игры', 'Место'],
-                 var_name='Раунд', value_name='Очки')
+                 var_name='Раунд', value_name='Очки') # From wide to long table
     return df
 
 
