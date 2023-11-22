@@ -79,7 +79,7 @@ def process_game(_game_id):
     soup = BeautifulSoup(page.content, 'html.parser')
     game_attrs = soup.find("div", class_='game-heading-info').find_all('h1')
 
-    date = soup.find_all("div", class_='game-info-column')[1].find("div", class_='text').text
+    date = soup.find_all("div", class_='game-info-column')[2].find("div", class_='text').text
     if _game_id < 49999:
         # Some hardcode for the correct game year determination. Needs to be updated every year
         date = dateparser.parse(date + ' 2022')
