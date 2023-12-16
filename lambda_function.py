@@ -3,40 +3,74 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 import time
-import dateparser
+from datetime import datetime
 import gspread
 from gspread_dataframe import set_with_dataframe
 import logging
 import json
+import boto3
 
-logging.basicConfig(filename='log.txt', level=logging.INFO, format='%(asctime)s.%(msecs)03d %(levelname)s: %(message)s',
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(levelname)s: %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
+# Constants
 MAIN_URL = 'https://yerevan.quizplease.ru/schedule-past'
 GAME_URL_TEMPLATE = 'https://yerevan.quizplease.ru/schedule-past?page={}'
 GAME_PAGE_URL_TEMPLATE = 'https://yerevan.quizplease.ru/game-page?id={}'
-LAST_GAME_ID_FILE = 'last_game_id.json'
-GOOGLE_SHEET_NAME = 'quiz-please-stats'
-GOOGLE_CREDENTIALS_FILE = 'google_creds.json'  # JSON file with Google credentials
+GOOGLE_SHEET_NAME = 'quiz-please-stats'  # Name of the Google Sheet to write the data to
+GOOGLE_CREDENTIALS_PARAMETER = '/quizgame/google_credentials'  # Name of the parameter in Parameter Store
+
+# Month translation dictionary
+month_translation = {
+    'января': 'January',
+    'февраля': 'February',
+    'марта': 'March',
+    'апреля': 'April',
+    'мая': 'May',
+    'июня': 'June',
+    'июля': 'July',
+    'августа': 'August',
+    'сентября': 'September',
+    'октября': 'October',
+    'ноября': 'November',
+    'декабря': 'December'
+}
 
 
-def save_last_game_id(_game_id):
+def get_google_credentials():
     """
-    Saves the last game ID to a file.
+    Retrieves Google credentials from AWS Systems Manager Parameter Store.
     """
-    with open(LAST_GAME_ID_FILE, 'w') as f:
-        json.dump({'last_game_id': _game_id}, f)
+    ssm = boto3.client('ssm')
+    parameter_name = GOOGLE_CREDENTIALS_PARAMETER
 
-
-def load_last_game_id():
-    """
-    Loads the last game ID from a file.
-    """
     try:
-        with open(LAST_GAME_ID_FILE, 'r') as f:
-            return json.load(f).get('last_game_id', 0)
-    except FileNotFoundError:
-        return 0
+        parameter = ssm.get_parameter(Name=parameter_name, WithDecryption=True)
+        return parameter['Parameter']['Value']
+    except Exception as e:
+        logging.error(f"Failed to retrieve Google credentials: {e}")
+        return None
+
+
+def load_last_processed_game_id():
+    try:
+        gc = gspread.service_account_from_dict(json.loads(get_google_credentials()))
+        sheet = gc.open(GOOGLE_SHEET_NAME).sheet1
+
+        # Assuming game IDs are in the first column, get all values in that column
+        game_id_column = sheet.col_values(1)
+        if not game_id_column:
+            logging.info('Google Sheet is empty')
+            return 0
+
+        logging.info(f"Last game ID in Google Sheet: {game_id_column[-1]}")
+        return int(game_id_column[-1])
+    except Exception as e:
+        logging.error(f"Failed to load last game ID from Google Sheets: {e}")
+        raise
 
 
 def get_game_ids(_last_game_id):
@@ -80,11 +114,16 @@ def process_game(_game_id):
     game_attrs = soup.find("div", class_='game-heading-info').find_all('h1')
 
     date = soup.find_all("div", class_='game-info-column')[2].find("div", class_='text').text
+    for ru_month, en_month in month_translation.items():
+        date = date.replace(ru_month, en_month)
+
+    # Some hardcode for the correct game year determination. Needs to be updated every year
     if _game_id < 49999:
-        # Some hardcode for the correct game year determination. Needs to be updated every year
-        date = dateparser.parse(date + ' 2022')
+        date += ' 2022'
     else:
-        date = dateparser.parse(date + ' 2023')
+        date += ' 2023'
+
+    date = datetime.strptime(date, '%d %B %Y').strftime('%Y-%m-%d %H:%M:%S')
 
     table = pd.read_html(page.text)
     df = table[0].filter(regex='аунд|есто|азвание', axis=1).copy()
@@ -95,7 +134,7 @@ def process_game(_game_id):
     df['ID'] = _game_id
     df['Дата'] = date
     df = df.melt(id_vars=['ID', 'Дата', 'Название команды', 'Категория', 'Название игры', 'Номер игры', 'Место'],
-                 var_name='Раунд', value_name='Очки') # From wide to long table
+                 var_name='Раунд', value_name='Очки')  # From wide to long table
     return df
 
 
@@ -119,7 +158,12 @@ def load_into_sheets(_df):
     Loads the processed data into Google Sheets.
     """
     try:
-        gc = gspread.service_account(filename=GOOGLE_CREDENTIALS_FILE)
+        google_creds_json = get_google_credentials()
+        if google_creds_json is None:
+            raise Exception("Google credentials could not be loaded")
+
+        # Use credentials to authorize with gspread
+        gc = gspread.service_account_from_dict(json.loads(google_creds_json))
         wks = gc.open(GOOGLE_SHEET_NAME).sheet1
         if not len(wks.get_all_values()):  # If the sheet is empty, write the DataFrame with headers
             set_with_dataframe(worksheet=wks, dataframe=_df, include_index=False, include_column_header=True,
@@ -129,24 +173,20 @@ def load_into_sheets(_df):
             wks.append_rows(data_to_append)  # Append the data to the sheet
     except Exception as e:
         logging.error(f"Failed to load data into Google Sheets: {e}")
+        raise
 
 
-def main():
+def lambda_handler(event, context):
     """
     The main function that runs the entire process.
     """
-    last_game_id = load_last_game_id()
+    last_game_id = load_last_processed_game_id()
     new_game_ids = get_game_ids(last_game_id)
     logging.info(f'Processing {len(new_game_ids)} new games')
     if new_game_ids:
         df = process_all_games(new_game_ids)
         df['Название команды'] = df['Название команды'].str.strip().str.upper()
         load_into_sheets(df)
-        save_last_game_id(max(new_game_ids))
         logging.info(f'Updated: {len(new_game_ids)} games')
     else:
         logging.info('No new games to process')
-
-
-if __name__ == "__main__":
-    main()
