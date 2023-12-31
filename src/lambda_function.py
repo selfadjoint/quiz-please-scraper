@@ -120,8 +120,10 @@ def process_game(_game_id):
     # Some hardcode for the correct game year determination. Needs to be updated every year
     if _game_id < 49999:
         date += ' 2022'
-    else:
+    elif _game_id < 69919:
         date += ' 2023'
+    else:
+        date += ' 2024'
 
     date = datetime.strptime(date, '%d %B %Y').strftime('%Y-%m-%d %H:%M:%S')
 

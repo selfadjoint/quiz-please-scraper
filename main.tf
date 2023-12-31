@@ -15,6 +15,8 @@ provider "aws" {
   profile                  = var.aws_profile
 }
 
+
+
 # SSM Parameter for Google Credentials
 resource "aws_ssm_parameter" "google_credentials" {
   name  = "/quizgame/google_credentials"
@@ -23,11 +25,11 @@ resource "aws_ssm_parameter" "google_credentials" {
 
   tags = {
     Name    = "GoogleCredentials"
-    Project = "QuizPlease"
+    Project = var.tag_project
   }
 }
 
-
+# Lambda Role and Policy
 resource "aws_iam_role" "lambda_role" {
   name = "lambda_role"
 
@@ -81,26 +83,27 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
+
+# Lambda Function
 resource "aws_lambda_function" "quiz_game_lambda" {
   function_name = "QuizPleaseStats"
   role          = aws_iam_role.lambda_role.arn
   package_type  = "Image"
   timeout       = 300
 
-  image_uri = "940221471432.dkr.ecr.us-east-1.amazonaws.com/quiz-please-stats:latest"
+  image_uri = "${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.image_name}:${var.image_tag}"
 
   tags = {
     Name    = "QuizPleaseStats"
-    Project = "QuizPlease"
+    Project = var.tag_project
   }
 }
 
-
+# CloudWatch Event Rule
 resource "aws_cloudwatch_event_rule" "lambda_schedule" {
   name                = "quiz_game_schedule"
   schedule_expression = "cron(0 0 * * ? *)"
 }
-
 
 resource "aws_cloudwatch_event_target" "lambda" {
   rule      = aws_cloudwatch_event_rule.lambda_schedule.name
@@ -116,8 +119,13 @@ resource "aws_lambda_permission" "allow_cloudwatch" {
   source_arn    = aws_cloudwatch_event_rule.lambda_schedule.arn
 }
 
+# SNS Topic for Error Notifications
 resource "aws_sns_topic" "lambda_error_notifications" {
   name = "LambdaErrorNotifications"
+  tags = {
+    Name    = "LambdaErrorNotifications"
+    Project = var.tag_project
+  }
 }
 
 resource "aws_sns_topic_subscription" "lambda_error_email" {
@@ -126,6 +134,7 @@ resource "aws_sns_topic_subscription" "lambda_error_email" {
   endpoint  = var.notification_email
 }
 
+# CloudWatch Alarm for Lambda Errors
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   alarm_name          = "LambdaFunctionErrors"
   comparison_operator = "GreaterThanOrEqualToThreshold"

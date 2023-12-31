@@ -13,6 +13,10 @@ variable "aws_profile" {
   default = "default"
 }
 
+variable "aws_account_id" {
+  type = string
+}
+
 variable "google_credentials_file" {
   type    = string
   default = "google_credentials.json"
@@ -20,5 +24,26 @@ variable "google_credentials_file" {
 
 variable "notification_email" {
   type = string
+}
+
+variable "tag_project" {
+  type    = string
+  default = "QuizPlease"
+}
+
+variable "repository_name" {
+  type    = string
+  default = "quiz-please-stats"
+}
+
+variable "image_name" {
+  type    = string
+  default = "quiz-please-stats"
+}
+
+
+variable "image_tag" {
+  type    = string
+  default = "latest"
 }
 
