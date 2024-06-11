@@ -90,6 +90,7 @@ resource "aws_lambda_function" "quiz_game_lambda" {
   role          = aws_iam_role.lambda_role.arn
   package_type  = "Image"
   timeout       = 300
+  memory_size   = 256
 
   image_uri = "${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.image_name}:${var.image_tag}"
 
