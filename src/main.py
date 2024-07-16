@@ -118,11 +118,11 @@ def process_game(_game_id):
 
     # Some hardcode for the correct game year determination. Needs to be updated every year
     if _game_id < 49999:
-        date += ' 2022'
+        date.append('2022')
     elif _game_id < 69919:
-        date += ' 2023'
+        date.append('2023')
     else:
-        date += ' 2024'
+        date.append('2024')
 
     date = '-'.join(date[::-1])
 

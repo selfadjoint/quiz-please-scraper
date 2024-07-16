@@ -2,12 +2,12 @@
 
 # Function to extract variable value from terraform.tfvars
 extract_tfvars_value() {
-  grep "^$1 =" ../terraform.tfvars | cut -d '=' -f2 | xargs
+  grep "^$1 =" ../terraform/terraform.tfvars | cut -d '=' -f2 | xargs
 }
 
 # Function to extract variable default value from variables.tf
 extract_default_value() {
-  grep -E "^variable \"$1\" \{" -A 2 ../variables.tf | grep 'default =' | cut -d '=' -f2 | xargs
+  grep -E "^variable \"$1\" \{" -A 2 ../terraform/variables.tf | grep 'default =' | cut -d '=' -f2 | xargs
 }
 
 # Function to get variable value

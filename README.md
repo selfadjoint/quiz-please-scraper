@@ -23,7 +23,7 @@ Before deploying this project, ensure the following prerequisites are met:
 
 ## Configuration
 
-Create a `terraform.tfvars` file in the root directory with the following variables:
+Create a `terraform.tfvars` file in the `terraform` directory with the following variables:
 
 - `aws_account_id`: Your AWS account ID.
 - `notification_email`: Email address for receiving error notifications.
@@ -32,7 +32,7 @@ Create a `terraform.tfvars` file in the root directory with the following variab
 
 ## Python Script
 
-The core functionality of this project is driven by a [Python script](src/lambda_function.py) which:
+The core functionality of this project is driven by a [Python script](src/main.py) which:
 
 - Scrapes quiz data from a specified URL.
 - Transforms the data and prepares it for Google Sheets.

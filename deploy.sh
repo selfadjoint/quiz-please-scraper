@@ -10,7 +10,7 @@ bash "image_push.sh"
 
 # Initialize Terraform (if needed)
 echo "Initializing Terraform..."
-cd "../"
+cd "../terraform/"
 terraform init
 
 # Apply the Terraform script
