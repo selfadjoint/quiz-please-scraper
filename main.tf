@@ -86,6 +86,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
 
 # Lambda Function
 resource "aws_lambda_function" "quiz_game_lambda" {
+  description = "Parse quiz game data, process it, and store it in a Google Sheet"
   function_name = "QuizPleaseStats"
   role          = aws_iam_role.lambda_role.arn
   package_type  = "Image"
