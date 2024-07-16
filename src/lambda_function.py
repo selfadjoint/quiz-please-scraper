@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 import time
-from datetime import datetime
 import gspread
 from gspread_dataframe import set_with_dataframe
 import logging
@@ -25,18 +24,18 @@ GOOGLE_CREDENTIALS_PARAMETER = '/quizgame/google_credentials'  # Name of the par
 
 # Month translation dictionary
 month_translation = {
-    'января': 'January',
-    'февраля': 'February',
-    'марта': 'March',
-    'апреля': 'April',
-    'мая': 'May',
-    'июня': 'June',
-    'июля': 'July',
-    'августа': 'August',
-    'сентября': 'September',
-    'октября': 'October',
-    'ноября': 'November',
-    'декабря': 'December'
+    'января': '01',
+    'февраля': '02',
+    'марта': '03',
+    'апреля': '04',
+    'мая': '05',
+    'июня': '06',
+    'июля': '07',
+    'августа': '08',
+    'сентября': '09',
+    'октября': '10',
+    'ноября': '11',
+    'декабря': '12',
 }
 
 
@@ -113,9 +112,9 @@ def process_game(_game_id):
     soup = BeautifulSoup(page.content, 'html.parser')
     game_attrs = soup.find("div", class_='game-heading-info').find_all('h1')
 
-    date = soup.find_all("div", class_='game-info-column')[2].find("div", class_='text').text
-    for ru_month, en_month in month_translation.items():
-        date = date.replace(ru_month, en_month)
+    date = soup.find_all('div', class_='game-info-column')[2].find('div', class_='text').text.split()
+    date[0] = '0' + date[0] if len(date[0]) == 1 else date[0]
+    date[1] = month_translation[date[1]]
 
     # Some hardcode for the correct game year determination. Needs to be updated every year
     if _game_id < 49999:
@@ -125,7 +124,7 @@ def process_game(_game_id):
     else:
         date += ' 2024'
 
-    date = datetime.strptime(date, '%d %B %Y').strftime('%Y-%m-%d %H:%M:%S')
+    date = '-'.join(date[::-1])
 
     table = pd.read_html(page.text)
     df = table[0].filter(regex='аунд|есто|азвание', axis=1).copy()
