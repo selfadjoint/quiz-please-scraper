@@ -22,28 +22,25 @@ variable "google_credentials_file" {
   default = "google_credentials.json"
 }
 
+variable "tags" {
+  type = map(string)
+  default = {
+    Name    = "QuizPleaseStats"
+    Project = "QuizPlease"
+  }
+}
+
 variable "notification_email" {
   type = string
 }
-
-variable "tag_project" {
-  type    = string
-  default = "QuizPlease"
-}
-
-variable "repository_name" {
-  type    = string
-  default = "quiz-please-stats"
-}
-
-variable "image_name" {
-  type    = string
-  default = "quiz-please-stats"
-}
-
 
 variable "image_tag" {
   type    = string
   default = "latest"
 }
 
+variable "resource_name" {
+  description = "The prefix for all resource names"
+  type        = string
+  default     = "QuizPleaseStats"
+}

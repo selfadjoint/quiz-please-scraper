@@ -7,7 +7,7 @@ extract_tfvars_value() {
 
 # Function to extract variable default value from variables.tf
 extract_default_value() {
-  grep -E "^variable \"$1\" \{" -A 2 ../terraform/variables.tf | grep 'default =' | cut -d '=' -f2 | xargs
+  awk "/variable \"$1\" \{/,/\}/" ../terraform/variables.tf | grep '^\s*default' | cut -d '=' -f2 | xargs
 }
 
 # Function to get variable value
@@ -25,13 +25,13 @@ get_variable_value() {
 # Variables to look for
 region=$(get_variable_value "aws_region")
 aws_account_id=$(get_variable_value "aws_account_id")
-repository_name=$(get_variable_value "repository_name")
-image_name=$(get_variable_value "image_name")
+repository_name=$(get_variable_value "resource_name" | tr '[:upper:]' '[:lower:]')
+image_name=$(get_variable_value "resource_name" | tr '[:upper:]' '[:lower:]')
 image_tag=$(get_variable_value "image_tag")
 
 # Check if variables are empty
 if [ -z "$region" ] || [ -z "$aws_account_id" ] || [ -z "$repository_name" ]; then
-  echo "Error: One or more required variables are not set."
+  echo "Error: One or more required variables are not set: region=$region, aws_account_id=$aws_account_id, repository_name=$repository_name"
   exit 1
 fi
 
