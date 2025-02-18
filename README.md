@@ -23,12 +23,24 @@ Before deploying this project, ensure the following prerequisites are met:
 
 ## Configuration
 
-Create a `terraform.tfvars` file in the `terraform` directory with the following variables:
+Create a `terraform.tfvars` file in the `terraform` directory with the following variables and any other variables to overwrite the default values from `variables.tf` if needed:
+```hcl
+aws_credentials_file    = "~/.aws/credentials"
+aws_profile             = "your_aws_profile"
+aws_account_id          = "12334556"                
+notification_email      = "test@test.test"          
+google_credentials_file = "google_credentials.json" 
+```
+Create a file named `backend.hcl` inside the `terraform` folder with content similar to:
 
-- `aws_account_id`: Your AWS account ID.
-- `notification_email`: Email address for receiving error notifications.
-- `google_credentials_file`: Path to your Google Service Account credentials JSON file.
-- Any other variables to overwrite the default values from `variables.tf` if needed.
+```hcl
+bucket       = "your-tf-state-bucket"                  # Replace with your S3 bucket name
+key          = "your-resource-name/terraform.tfstate"  # Adjust as needed
+region       = "us-east-1"                             # Your AWS region
+profile      = "your_aws_profile"                      # The AWS CLI profile to use
+encrypt      = true
+use_lockfile = true
+```
 
 ## Python Script
 
