@@ -11,7 +11,7 @@ bash "image_push.sh"
 # Initialize Terraform (if needed)
 echo "Initializing Terraform..."
 cd "../terraform/"
-terraform init
+terraform init -backend-config=backend.hcl
 
 # Apply the Terraform script
 echo "Applying Terraform script..."
