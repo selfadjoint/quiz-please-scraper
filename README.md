@@ -1,36 +1,62 @@
-# Quiz Please Stats - AWS Lambda Deployment
+# Quiz Please Stats Scraper
 
 This project automates the deployment of a Python-based AWS Lambda function to process and transform
 the [Quiz Please](https://quizplease.ru/) games data, storing the results in Google Sheets. The architecture is designed
 to stay within the AWS Free Tier, making it cost-effective for personal use.
 
+## Table of Contents
+
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Setup](#setup)
+- [Python Script](#python-script)
+- [Architecture](#architecture)
+- [What to Do with the Data](#what-to-do-with-the-data)
+- [Clean Up](#clean-up)
+
+## Project Structure
+
+```plaintext
+├── src
+│   ├── main.py                # Lambda function code
+│   ├── requirements.txt       # Python dependency definitions
+│   └── (other source files or folders)
+└── terraform
+    ├── main.tf                # Terraform configuration
+    ├── variables.tf           # Input variables
+    ├── backend.hcl            # Backend configuration (not committed; see below)
+    └── (other Terraform files)
+├── README.md
+```
+
 ## Prerequisites
 
-Before deploying this project, ensure the following prerequisites are met:
+Before you begin, ensure you have the following installed:
 
-- AWS Account: You will need an AWS account. If you don't have one, you can sign up for
-  the [AWS Free Tier](https://aws.amazon.com/free/).
-- AWS CLI: The AWS Command Line Interface should be installed and configured with your AWS
-  credentials. [AWS CLI Installation Guide](https://aws.amazon.com/cli/).
-- Docker: Required for building the Lambda function's Docker
-  image. [Docker Installation Guide](https://docs.docker.com/get-docker/).
-- Terraform: Used for deploying AWS resources. [Terraform Installation Guide](https://www.terraform.io/downloads).
-- jq: A lightweight and flexible command-line JSON
-  processor. [jq Installation Guide](https://jqlang.github.io/jq/download/).
-- Google Service Account: A Google Cloud Platform service account with permissions to access Google
-  Sheets. [Creating and Managing Service Accounts](https://cloud.google.com/iam/docs/service-accounts-create).
-- Google Service Account Credentials File: A JSON file containing your service account's credentials.
+- [AWS CLI](https://aws.amazon.com/cli/)
+- [Terraform](https://www.terraform.io/)
+- [Python 3.11+](https://www.python.org/)
+- [pip](https://pip.pypa.io/en/stable/)
+- [Google Service Account](https://cloud.google.com/iam/docs/service-accounts-create) with a JSON file containing your service account's credentials.
 
-## Configuration
+## Setup
 
-Create a `terraform.tfvars` file in the `terraform` directory with the following variables and any other variables to overwrite the default values from `variables.tf` if needed:
-```hcl
-aws_credentials_file    = "~/.aws/credentials"
-aws_profile             = "your_aws_profile"
-aws_account_id          = "12334556"                
-notification_email      = "test@test.test"          
-google_credentials_file = "google_credentials.json" 
+### 1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/your-repo/quiz-plese-reg.git
+   cd quiz-please-reg
+
+### 2. Install Python Dependencies
+The dependencies are not committed to the repository. To install them into the src folder, run:
+```bash
+pip install --upgrade --target ./src -r src/requirements.txt
 ```
+This command installs all required Python packages into the src directory so that they are included in the Lambda deployment package.
+
+### 3. Configure the Terraform Backend and Variables
+Terraform uses an S3 backend for state storage. Since sensitive information should not be committed to the repository, create a separate backend configuration file.
+
 Create a file named `backend.hcl` inside the `terraform` folder with content similar to:
 
 ```hcl
@@ -41,6 +67,33 @@ profile      = "your_aws_profile"                      # The AWS CLI profile to 
 encrypt      = true
 use_lockfile = true
 ```
+**Create a `terraform.tfvars` file with the necessary variables. Example**:
+
+```hcl
+aws_profile                = "default"
+google_credentials_file    = "path/to/google_credentials.json"
+notification_email         = "d5YQZ@example.com"
+```
+
+### 4. Initialize Terraform
+Change to the terraform directory and initialize Terraform using the backend configuration:
+```bash
+cd terraform
+terraform init -backend-config=backend.hcl
+```
+This command sets up the backend and downloads required providers.
+
+### 5. Review and Apply the Terraform Configuration
+First, run a plan to see the changes that Terraform will apply:
+```bash
+terraform plan
+```
+
+If everything looks correct, deploy the resources with:
+```bash
+terraform apply
+```
+Confirm the apply action when prompted.
 
 ## Python Script
 
@@ -60,42 +113,15 @@ EventBridge.
 The project uses AWS Lambda, AWS SNS for error notifications, AWS CloudWatch for monitoring, and an EventBridge rule for
 daily script execution. Data is stored and processed in Google Sheets.
 
-## Deployment
-
-Deployment is automated via a script, `deploy.sh`, which encompasses the following steps:
-
-1. **Build and Push Docker Image:** The script runs `src/image_push.sh` to build the Docker image and push it to an AWS
-   ECR repository.
-
-2. **Terraform Deployment:** The script then executes the Terraform commands to deploy the necessary AWS resources,
-   including the Lambda function, IAM roles, CloudWatch event rule, and SNS topic for error notifications.
-
-To deploy:
-
-- Ensure all prerequisites are installed and properly configured.
-- Run the deployment script:
-  ```bash
-  ./deploy.sh
-
-3. **Monitor and Test:** After deployment, you can monitor the Lambda function in the AWS Console. Test the function to
-   ensure it's processing and updating data as expected.
-
-## Staying Within the AWS Free Tier
-
-This project is designed to operate within the AWS Free Tier limits. However, it's essential to monitor your AWS usage
-to avoid unexpected charges, especially if your usage scales up.
-
-## Notes
-
-- Ensure all prerequisites are installed and properly configured before deploying.
-- The provided Terraform script and Docker build script are tested on MacOS 14. Adjustments may be required for other
-  operating systems.
-
-## License
-
-This project is released under the [MIT License](LICENSE).
 
 ## What to Do with the Data
 
 Whatever you want :) Here is the Tableau dashboard (in Russian) I created using the data scraped by this
 script: [Quiz Please Yerevan Dashboard](https://public.tableau.com/app/profile/dannyviz/viz/QuizPleaseYerevan/Teamstats).
+
+## Clean Up
+To remove all resources created by Terraform, run:
+```bash
+terraform destroy
+```
+This will tear down the deployed AWS resources.
