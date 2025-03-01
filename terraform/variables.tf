@@ -13,10 +13,6 @@ variable "aws_profile" {
   default = "default"
 }
 
-variable "aws_account_id" {
-  type = string
-}
-
 variable "google_credentials_file" {
   type    = string
   default = "google_credentials.json"

@@ -16,6 +16,12 @@ provider "aws" {
   profile                  = var.aws_profile
 }
 
+# Archive the Lambda code directory into a zip file.
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../src"
+  output_path = "${path.module}/lambda.zip"
+}
 
 # SSM Parameter for Google Credentials
 resource "aws_ssm_parameter" "google_credentials" {
@@ -83,16 +89,16 @@ resource "aws_iam_role_policy" "lambda_execution_role_policy" {
 
 # Lambda Function
 resource "aws_lambda_function" "game_stats" {
-  description   = "Parse quiz game data, process it, and store it in a Google Sheet"
-  function_name = var.resource_name
-  role          = aws_iam_role.lambda_execution_role.arn
-  package_type  = "Image"
-  timeout       = 300
-  memory_size   = 256
-
-  image_uri = "${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${lower(var.resource_name)}:${var.image_tag}"
-
-  tags = var.tags
+  description      = "Parse quiz game data, process it, and store it in a Google Sheet"
+  function_name    = var.resource_name
+  role             = aws_iam_role.lambda_execution_role.arn
+  handler          = "main.lambda_handler"
+  runtime          = "python3.11"
+  filename         = data.archive_file.lambda_zip.output_path
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  timeout          = 300
+  memory_size      = 256
+  tags             = var.tags
 }
 
 resource "aws_lambda_permission" "allow_execution" {
@@ -132,14 +138,15 @@ resource "aws_sns_topic_subscription" "lambda_error_email" {
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   alarm_name          = var.resource_name
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = "1"
+  evaluation_periods  = 1
   metric_name         = "Errors"
   namespace           = "AWS/Lambda"
-  period              = "300"
+  period              = 300
   statistic           = "Sum"
-  threshold           = "1"
+  threshold           = 1
   alarm_description   = "This metric monitors Lambda errors"
   alarm_actions       = [aws_sns_topic.lambda_error_notifications.arn]
+  ok_actions          = [aws_sns_topic.lambda_error_notifications.arn]
   dimensions = {
     FunctionName = aws_lambda_function.game_stats.function_name
   }
