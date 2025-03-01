@@ -1,10 +1,8 @@
 import requests as req
 from bs4 import BeautifulSoup
-import pandas as pd
 import re
 import time
 import gspread
-from gspread_dataframe import set_with_dataframe
 import logging
 import json
 import boto3
@@ -105,76 +103,150 @@ def get_game_ids(_last_game_id):
 
 def process_game(_game_id):
     """
-    Fetches and processes data for a single game.
+    Fetches and processes data for a single game without using pandas.
+    Returns a list of dictionaries, each representing one melted row.
     """
+
+    # Fetch the game page and parse with BeautifulSoup
     game_url = GAME_PAGE_URL_TEMPLATE.format(_game_id)
     page = req.get(game_url)
     soup = BeautifulSoup(page.content, 'html.parser')
-    game_attrs = soup.find("div", class_='game-heading-info').find_all('h1')
 
-    date = soup.find_all('div', class_='game-info-column')[2].find('div', class_='text').text.split()
-    date[0] = '0' + date[0] if len(date[0]) == 1 else date[0]
-    date[1] = month_translation[date[1]]
+    # Get game header attributes
+    game_heading = soup.find("div", class_="game-heading-info")
+    game_attrs = game_heading.find_all("h1") if game_heading else []
 
-    # Some hardcode for the correct game year determination. Needs to be updated every year
-    if _game_id < 49999:
-        date.append('2022')
-    elif _game_id < 69919:
-        date.append('2023')
+    # Process date using zfill and the month translation dictionary
+    info_columns = soup.find_all("div", class_="game-info-column")
+    if len(info_columns) >= 3:
+        date_text = info_columns[2].find("div", class_="text").get_text(strip=True).split()
     else:
-        date.append('2024')
+        date_text = ["1", "января"]
+    day = date_text[0].zfill(2)
+    month = month_translation.get(date_text[1], date_text[1])
+    if _game_id < 49999:
+        year = "2022"
+    elif _game_id < 69919:
+        year = "2023"
+    elif _game_id < 93630:
+        year = "2024"
+    else:
+        year = "2025"
+    full_date = f"{year}-{month}-{day}"
 
-    date = '-'.join(date[::-1])
+    # Parse the first HTML table on the page.
+    table_tag = soup.find("table")
+    if not table_tag:
+        logging.error("No table found in the game page.")
+        return []
 
-    table = pd.read_html(page.text)
-    df = table[0].filter(regex='аунд|есто|азвание', axis=1).copy()
-    df.columns = df.columns.str.capitalize()
-    df['Категория'] = soup.find("div", class_="game-tag").text.strip()
-    df['Название игры'] = re.findall('.+(?=\sY)', game_attrs[0].text)[0]
-    df['Номер игры'] = game_attrs[1].text[1:]
-    df['ID'] = _game_id
-    df['Дата'] = date
-    df = df.melt(id_vars=['ID', 'Дата', 'Название команды', 'Категория', 'Название игры', 'Номер игры', 'Место'],
-                 var_name='Раунд', value_name='Очки')  # From wide to long table
-    return df
+    # Extract headers: if there's a thead, use it; otherwise use the first row.
+    headers = []
+    thead = table_tag.find("thead")
+    if thead:
+        header_row = thead.find("tr")
+        headers = [th.get_text(strip=True).capitalize() for th in header_row.find_all(["th", "td"])]
+    else:
+        first_tr = table_tag.find("tr")
+        headers = [cell.get_text(strip=True).capitalize() for cell in first_tr.find_all(["th", "td"])]
+
+    # Filter headers to only include those matching the regex (e.g. 'аунд', 'есто', 'азвание')
+    regex = re.compile(r"(аунд|есто|азвание)", re.IGNORECASE)
+    filtered_indices = [i for i, h in enumerate(headers) if regex.search(h)]
+    # We'll use the original header names (capitalized) when extracting cells.
+
+    # Extract data rows (skip header row if no thead)
+    data_rows = []
+    tbody = table_tag.find("tbody")
+    rows = tbody.find_all("tr") if tbody else table_tag.find_all("tr")[1:]
+    for row in rows:
+        cells = row.find_all(["td", "th"])
+        row_data = {}
+        for i in filtered_indices:
+            if i < len(cells):
+                cell_text = cells[i].get_text(strip=True)
+            else:
+                cell_text = ""
+            row_data[headers[i]] = cell_text.strip().upper()
+        data_rows.append(row_data)
+
+    # Add additional columns from page content
+    category = soup.find("div", class_="game-tag").get_text(strip=True) if soup.find("div", class_="game-tag") else ""
+    game_name = ""
+    if game_attrs and len(game_attrs) > 0:
+        match = re.findall(r".+(?=\sY)", game_attrs[0].get_text(strip=True))
+        if match:
+            game_name = match[0]
+    game_number = game_attrs[1].get_text(strip=True)[1:] if len(game_attrs) > 1 else ""
+
+    additional_data = {
+        "Категория": category,
+        "Название игры": game_name,
+        "Номер игры": game_number,
+        "ID": _game_id,
+        "Дата": full_date,
+    }
+    for row in data_rows:
+        row.update(additional_data)
+
+    # Define id_vars that will remain unchanged during the melt operation
+    id_vars = ["ID", "Дата", "Название команды", "Категория", "Название игры", "Номер игры", "Место"]
+
+    # Manually perform the melt: for each row, for each key not in id_vars,
+    # create a new row with the id_vars plus "Раунд" (the original column name) and "Очки" (its value)
+    melted = []
+    for row in data_rows:
+        for key, value in row.items():
+            if key not in id_vars:
+                new_row = {k: row.get(k, "") for k in id_vars}
+                new_row["Раунд"] = key
+                new_row["Очки"] = value
+                melted.append(new_row)
+
+    return melted
 
 
-def process_all_games(_game_ids):
+def load_into_sheets(data):
     """
-    Processes data for all new games.
-    """
-    data = []
-    for _id in _game_ids:
-        try:
-            df = process_game(_id)
-            data.append(df)
-            time.sleep(1)
-        except Exception as e:
-            logging.error(f"Failed to process game ID {_id}: {e}")
-    return pd.concat(data)
-
-
-def load_into_sheets(_df):
-    """
-    Loads the processed data into Google Sheets.
+    Loads the processed data (list of dictionaries) into Google Sheets.
+    If the sheet is empty, it writes a header row (derived from the dictionary keys) and the data.
+    Otherwise, it appends only the new rows.
     """
     try:
         google_creds_json = get_google_credentials()
         if google_creds_json is None:
             raise Exception("Google credentials could not be loaded")
 
-        # Use credentials to authorize with gspread
+        # Authorize with gspread using the provided credentials
         gc = gspread.service_account_from_dict(json.loads(google_creds_json))
         wks = gc.open(GOOGLE_SHEET_NAME).sheet1
-        if not len(wks.get_all_values()):  # If the sheet is empty, write the DataFrame with headers
-            set_with_dataframe(worksheet=wks, dataframe=_df, include_index=False, include_column_header=True,
-                               resize=True)
-        else:  # If the sheet is not empty, append the DataFrame without headers
-            data_to_append = _df.astype(str).values.tolist()  # Convert DataFrame to list of lists
-            wks.append_rows(data_to_append)  # Append the data to the sheet
+
+        # Get existing values from the sheet
+        existing_values = wks.get_all_values()
+
+        if not existing_values:
+            # Sheet is empty: prepare header from keys and full data rows
+            header = list(data[0].keys()) if data else []
+            rows = [header]
+            for entry in data:
+                row = [str(entry.get(col, "")) for col in header]
+                rows.append(row)
+            # Update the sheet starting at A1
+            wks.update('A1', rows)
+        else:
+            # Sheet is not empty: assume header is already present.
+            # Use the existing header to order the new data rows.
+            header = existing_values[0]
+            rows = []
+            for entry in data:
+                row = [str(entry.get(col, "")) for col in header]
+                rows.append(row)
+            # Append the new rows to the sheet.
+            wks.append_rows(rows)
     except Exception as e:
         logging.error(f"Failed to load data into Google Sheets: {e}")
         raise
+
 
 
 def lambda_handler(event, context):
@@ -185,9 +257,9 @@ def lambda_handler(event, context):
     new_game_ids = get_game_ids(last_game_id)
     logging.info(f'Processing {len(new_game_ids)} new games')
     if new_game_ids:
-        df = process_all_games(new_game_ids)
-        df['Название команды'] = df['Название команды'].str.strip().str.upper()
-        load_into_sheets(df)
+        for game in new_game_ids:
+            game_stats = process_game(game)
+            load_into_sheets(game_stats)
         logging.info(f'Updated: {len(new_game_ids)} games')
     else:
         logging.info('No new games to process')
