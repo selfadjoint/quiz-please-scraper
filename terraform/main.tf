@@ -138,7 +138,8 @@ resource "aws_sns_topic_subscription" "lambda_error_email" {
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   alarm_name          = var.resource_name
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = 1
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
   metric_name         = "Errors"
   namespace           = "AWS/Lambda"
   period              = 300
@@ -146,7 +147,6 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   threshold           = 1
   alarm_description   = "This metric monitors Lambda errors"
   alarm_actions       = [aws_sns_topic.lambda_error_notifications.arn]
-  ok_actions          = [aws_sns_topic.lambda_error_notifications.arn]
   dimensions = {
     FunctionName = aws_lambda_function.game_stats.function_name
   }
